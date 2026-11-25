@@ -1,103 +1,158 @@
 # DOM Clobbering Lab
 
-A tiny, dependency-free, intentionally vulnerable web app for practicing **DOM clobbering**
-end to end: from a single global overwrite to stored clobbering that disables a sanitizer and
-yields XSS.
+An interactive, intentionally vulnerable web application designed to help security researchers and web penetration testers understand and exploit **DOM Clobbering** vulnerabilities through practical, hands-on challenges.
 
-Every challenge is HTML-only — you never get to inject `<script>`. That's the point.
+This lab demonstrates how attacker-controlled HTML elements can manipulate JavaScript global variables, interfere with application logic, bypass naive sanitization mechanisms, and potentially lead to Cross-Site Scripting (XSS).
 
-## Quick start
+No external dependencies, frameworks, or network access required.
 
-**Windows:** double-click `run.bat` (starts the server in a second window and opens the browser).
+## Overview
 
-**macOS / Linux / WSL:**
+DOM Clobbering is a client-side injection technique in which HTML elements with specific `id` or `name` attributes interfere with JavaScript variables and DOM properties.
 
-```bash
-cd dom-clobbering-lab
-python3 server.py          # or: ./run.sh 8000
-```
+Instead of injecting JavaScript directly, an attacker manipulates the DOM using HTML elements to influence how the application's JavaScript behaves.
 
-Then open <http://127.0.0.1:8000/>.
+This lab provides a controlled environment to explore these behaviors from an attacker's perspective.
 
-Requirements: Python 3.7+. No pip packages, no build step, no network access needed.
-On Windows, install Python from python.org and enable "Add python.exe to PATH".
+## Features
 
-## How a challenge works
-
-Each lab page simulates a small "victim app" whose source you can read. You type HTML into the
-payload box, it is rendered into the victim page (`#victim`), and the victim's JavaScript runs
-against it.
-
-- **Render & run app** — inject your HTML and execute the victim code.
-- **Verify exploit** — the lab checks the observable side effect (a leaked value, a request that
-  reached `/collect`, or an executed handler) and awards a flag.
-- **Reset page** — clear the payload and per-lab state.
-- **Attacker inbox** — <http://127.0.0.1:8000/attacker.html> shows everything that arrives at the
-  attacker collector (`/collect`).
-
-The server exposes a real collector:
-
-| Endpoint | Purpose |
-| --- | --- |
-| `POST /collect` | attacker receiver (logs body) |
-| `GET /collect?…` | same, for image beacons (logs query) |
-| `GET /collect.json` | raw log as JSON |
-| `POST /reset` | clear the log |
-
-`solutions.md` contains full walkthroughs — try the labs first.
+- 5 practical DOM Clobbering challenges.
+- HTML-only payload injection.
+- JavaScript global variable clobbering.
+- HTMLCollection named property access.
+- Form and anchor element manipulation.
+- Stored DOM Clobbering scenarios.
+- Sanitizer bypass techniques.
+- XSS escalation through DOM manipulation.
+- Built-in attacker-controlled data collector.
+- Challenge verification and flag system.
+- No external dependencies.
 
 ## Challenges
 
-| # | Lab | Difficulty | Lesson |
-| --- | --- | --- | --- |
-| 1 | Debug mode by default | easy | a bare `window.X` lookup resolves to an injected element, breaking `===` checks |
-| 2 | Analytics beacon | easy | `id` + `name` on a second element ⇒ `HTMLCollection` named access; anchor `toString()` is `href` |
-| 3 | Checkout hijack | medium | `document.<name>` lookups and `form.action` let you reroute a POST |
-| 4 | Stored clobber disables the sanitizer | hard | persisting a benign tag beats an allowlist sanitizer, then escalates to XSS |
-| 5 | Capstone: unsigned upload | hard | chaining two clobbers to skip a signature check and move the destination |
+| # | Challenge | Difficulty | Key Concept |
+|---|---|---|---|
+| 01 | Debug Mode by Default | Easy | Global variable clobbering |
+| 02 | Analytics Beacon | Easy | HTMLCollection and anchor coercion |
+| 03 | Checkout Hijack | Medium | Document named properties and form manipulation |
+| 04 | Stored Clobber Disables the Sanitizer | Hard | Stored DOM Clobbering and XSS |
+| 05 | Unsigned Upload | Hard | Chained DOM Clobbering and security logic bypass |
 
-## Layout
+## Getting Started
 
+### Requirements
+
+- Python 3.7 or higher
+- Modern web browser
+- No additional Python packages required
+
+### Windows
+
+Run:
+
+```bash
+run.bat
 ```
+
+### Linux / macOS / WSL
+
+```bash
+python3 server.py
+```
+
+Alternatively:
+
+```bash
+./run.sh 8000
+```
+
+Open the application:
+
+```text
+http://127.0.0.1:8000/
+```
+
+## Attacker Inbox
+
+The lab includes a built-in collector for observing attacker-controlled requests and collected data.
+
+```text
+http://127.0.0.1:8000/attacker.html
+```
+
+Available endpoints:
+
+| Endpoint | Description |
+|---|---|
+| `POST /collect` | Receives attacker-controlled POST data |
+| `GET /collect?...` | Receives GET requests and image beacons |
+| `GET /collect.json` | Returns collected data in JSON format |
+| `POST /reset` | Clears the collector log |
+
+## Learning Objectives
+
+By completing these challenges, you will understand:
+
+- How HTML elements can create named properties on `window` and `document`.
+- How `id` and `name` attributes can interfere with JavaScript globals.
+- How HTMLCollection objects can be abused through named access.
+- How DOM clobbering can affect application logic and security checks.
+- How attacker-controlled DOM elements can influence URL and form properties.
+- How stored HTML injection can interact with vulnerable sanitizers.
+- How DOM Clobbering can contribute to XSS exploitation.
+
+## Mitigation & Defense
+
+To reduce the risk of DOM Clobbering:
+
+- Avoid relying on implicit global variables.
+- Use explicit DOM selectors such as `document.getElementById()`.
+- Prefer module-scoped variables and constants.
+- Validate expected object types and DOM ownership.
+- Avoid inserting untrusted HTML using `innerHTML`.
+- Use maintained sanitization libraries with DOM Clobbering protections.
+- Apply strict Content Security Policy as an additional security layer.
+- Include DOM Clobbering scenarios in security regression testing.
+
+## Project Structure
+
+```text
 dom-clobbering-lab/
-├── server.py            # static server + /collect collector (stdlib only)
+├── server.py
 ├── run.sh
+├── run.bat
 ├── solutions.md
-├── collect.log          # created at runtime
-└── public/
-    ├── index.html
-    ├── lab1.html … lab5.html
-    ├── attacker.html
-    ├── css/lab.css
-    └── js/lab.js        # shared logging / injection / verify helpers
+├── public/
+│   ├── index.html
+│   ├── lab1.html
+│   ├── lab2.html
+│   ├── lab3.html
+│   ├── lab4.html
+│   ├── lab5.html
+│   ├── attacker.html
+│   ├── css/
+│   │   └── lab.css
+│   └── js/
+│       └── lab.js
 ```
-
-## The vulnerability in one paragraph
-
-An element with `id="x"` or `name="x"` becomes `window.x` and `document.x`. Multiple elements
-with the same name produce an `HTMLCollection`, whose named children are reachable as
-properties. Elements are objects, not strings, and their missing properties are `undefined`, so
-code that does `window.cfg || {}` followed by `cfg.field` silently consumes attacker-controlled
-DOM nodes. `HTMLAnchorElement.toString()` returns its `href`, so `<a>` is a universal
-"attacker-controlled string" gadget when a DOM node is coerced. `HTMLFormElement` exposes its
-controls by name, so `<form id=cfg><input name=url value=…>` clobbers `cfg.url`.
-
-## Defending against it
-
-1. Never trust bare global lookups. Use `document.getElementById(...)` / `querySelector`, and
-   prefer module-scoped `const`/`let` (module scope does not create `window` properties).
-2. Validate type and ownership: `Object.hasOwn(window, "cfg")` plus `typeof`/`instanceof`
-   checks. Reject anything that is a DOM node when you expect a plain object or a string.
-3. Prefer explicit storage (`Map`, closures, namespaced constants) over `window.*` globals.
-4. Sanitize untrusted HTML with a maintained library (DOMPurify with its DOM-clobbering
-   protections). Don't hand-roll regex sanitizers — this lab's sanitizer is deliberately naive.
-5. Avoid `innerHTML` for user content; use `textContent` and DOM APIs.
-6. Strict CSP does **not** stop DOM clobbering (no script is injected) — it only limits the
-   follow-on escalation. Fix the lookups.
-7. Regression test: inject `<a id="yourGlobalName"></a>` on pages that read that global and
-   check the app still behaves.
 
 ## Disclaimer
 
-This project is intentionally insecure and binds to `127.0.0.1` only. It exists for local,
-educational use. Do not deploy it on a public host or reuse its "victim" code as-is.
+This project is intentionally vulnerable and developed strictly for educational purposes and authorized security testing.
+
+It is designed to run locally on `127.0.0.1` and should never be deployed to a public-facing environment.
+
+Do not use these techniques against systems without explicit authorization.
+
+## Author
+
+**Mahan**
+
+Web Application Penetration Tester | Application Security Researcher
+
+- GitHub: [MahanXp](https://github.com/MاhnXp)
+- Medium: [MahanXp](https://medium.com/@MahanXp)
+
+---
+
+**If you find this project useful, consider giving it a ⭐**
