@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attacker inbox · DOM Clobbering Lab</title>
+<link rel="stylesheet" href="/css/lab.css">
+</head>
+<body>
+<header class="top">
+  <a href="/">← DOM Clobbering Lab</a>
+  <span class="badge">/collect · attacker-controlled</span>
+</header>
+
+<main>
+  <h1>Attacker inbox</h1>
+  <p class="lede">
+    Everything the victim apps send to <code>/collect</code> lands here. This simulates the
+    attacker's server: any data your payload manages to redirect, leak, or beacon ends up in
+    this table.
+  </p>
+
+  <section class="card">
+    <div class="row" style="margin:0 0 12px">
+      <button class="small" id="refresh">Refresh</button>
+      <button class="small ghost" id="clear">Clear</button>
+      <label style="display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px">
+        <input type="checkbox" id="auto" checked> auto-refresh
+      </label>
+    </div>
+    <table>
+      <thead>
+        <tr><th>time</th><th>method</th><th>path</th><th>query</th><th>body</th></tr>
+      </thead>
+      <tbody id="rows"><tr><td colspan="5" class="muted">No hits yet.</td></tr></tbody>
+    </table>
+  </section>
+</main>
+
+<script src="/js/lab.js"></script>
+<script>
+  var tbody = document.getElementById('rows');
+  var auto = document.getElementById('auto');
+
+  function row(e) {
+    var tr = document.createElement('tr');
+    var t = new Date(e.ts * 1000);
+    tr.innerHTML =
+      '<td class="kv">' + t.toTimeString().slice(0, 8) + '</td>' +
+      '<td class="kv">' + Lab.escapeHtml(e.method) + '</td>' +
+      '<td class="kv">' + Lab.escapeHtml(e.path) + '</td>' +
+      '<td class="body">' + Lab.escapeHtml(e.query || '—') + '</td>' +
+      '<td class="body">' + Lab.escapeHtml(e.body || '—') + '</td>';
+    return tr;
+  }
+
+  function load() {
+    Lab.entries().then(function (entries) {
+      tbody.innerHTML = '';
+      if (!entries.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="muted">No hits yet.</td></tr>';
+        return;
+      }
+      entries.slice().reverse().forEach(function (e) { tbody.appendChild(row(e)); });
+    });
+  }
+
+  document.getElementById('refresh').addEventListener('click', load);
+  document.getElementById('clear').addEventListener('click', function () {
+    Lab.clearCollector().then(load);
+  });
+
+  load();
+  setInterval(function () { if (auto.checked) load(); }, 2500);
+</script>
+</body>
+</html>

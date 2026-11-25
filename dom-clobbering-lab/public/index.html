@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DOM Clobbering Lab</title>
+<link rel="stylesheet" href="/css/lab.css">
+</head>
+<body>
+<header class="top">
+  <a href="/">DOM Clobbering Lab</a>
+  <span class="badge">local · intentionally vulnerable</span>
+</header>
+
+<main>
+  <h1>DOM Clobbering Lab</h1>
+  <p class="lede">
+    DOM clobbering is an HTML-only attack: elements with <code>id</code> or <code>name</code>
+    attributes become properties of <code>window</code> and <code>document</code>, letting an
+    attacker overwrite values that JavaScript reads later. No script injection required.
+    Each lab below is a small, self-contained "victim app" that you can feed HTML.
+  </p>
+
+  <section class="card">
+    <h2>How this works</h2>
+    <p style="margin-top:0">
+      Type HTML into the payload box on a lab page. It is rendered into the victim's page
+      (<code>#victim</code>), then the victim's JavaScript runs against it. If you make the app
+      misbehave — leak its secret, redirect a request, or execute your code — press
+      <strong>Verify exploit</strong> to capture the flag.
+    </p>
+    <p>
+      Anything you exfiltrate shows up in the <a href="/attacker.html">Attacker inbox</a>
+      (a real collector endpoint on this server at <code>/collect</code>).
+    </p>
+    <div class="row">
+      <a href="/attacker.html"><button class="ghost">Open attacker inbox</button></a>
+      <button class="ghost" id="clear">Clear collector log</button>
+    </div>
+  </section>
+
+  <h2 style="margin-top:26px">Challenges</h2>
+  <div class="labs">
+    <a class="labcard" href="/lab1.html">
+      <div class="n">LAB 1 · easy</div>
+      <div class="t">Debug mode by default</div>
+      <div class="d">A global flag decides whether the app runs in debug mode. You have no script execution — only HTML.</div>
+      <div class="done" data-lab="lab1"></div>
+    </a>
+    <a class="labcard" href="/lab2.html">
+      <div class="n">LAB 2 · easy</div>
+      <div class="t">Analytics beacon</div>
+      <div class="d">The app builds a beacon URL from a config object. Steal the session id.</div>
+      <div class="done" data-lab="lab2"></div>
+    </a>
+    <a class="labcard" href="/lab3.html">
+      <div class="n">LAB 3 · medium</div>
+      <div class="t">Checkout hijack</div>
+      <div class="d">A form's submission target is resolved from the DOM. Reroute a customer's order.</div>
+      <div class="done" data-lab="lab3"></div>
+    </a>
+    <a class="labcard" href="/lab4.html">
+      <div class="n">LAB 4 · hard</div>
+      <div class="t">Stored clobber disables the sanitizer</div>
+      <div class="d">A persisted profile field survives sanitization. Turn that into XSS on a comment.</div>
+      <div class="done" data-lab="lab4"></div>
+    </a>
+    <a class="labcard" href="/lab5.html">
+      <div class="n">LAB 5 · hard</div>
+      <div class="t">Capstone: unsigned upload</div>
+      <div class="d">Two independent clobbers: skip the signature check and move the upload destination.</div>
+      <div class="done" data-lab="lab5"></div>
+    </a>
+  </div>
+
+  <section class="card" style="margin-top:26px">
+    <h2>Rules</h2>
+    <ul style="margin:0;padding-left:20px;color:#b7c2d0">
+      <li>No <code>&lt;script&gt;</code> tags and no editing the victim code — the point is HTML-only clobbering.</li>
+      <li>Payloads are per-run; use <em>Reset page</em> to start clean (Lab 4 stores state in this tab).</li>
+      <li>Everything runs locally on 127.0.0.1. Do not deploy this to a public host.</li>
+    </ul>
+  </section>
+</main>
+
+<script src="/js/lab.js"></script>
+<script>
+  document.querySelectorAll('.done').forEach(function (el) {
+    if (Lab.isSolved(el.dataset.lab)) el.textContent = '✔ solved';
+  });
+  document.getElementById('clear').addEventListener('click', function () {
+    Lab.clearCollector().then(function () { alert('Collector log cleared.'); });
+  });
+</script>
+</body>
+</html>

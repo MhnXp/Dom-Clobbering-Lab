@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 1 · Debug mode by default</title>
+<link rel="stylesheet" href="/css/lab.css">
+</head>
+<body>
+<header class="top">
+  <a href="/">← DOM Clobbering Lab</a>
+  <span class="badge">Lab 1 · easy</span>
+</header>
+
+<main>
+  <h1>Debug mode by default</h1>
+  <p class="lede">
+    The app picks its environment from a global variable: <code>window.APP_ENV</code>.
+    If it isn't exactly the string <code>"production"</code>, the debug branch runs and prints
+    the app secret. Find an HTML-only way to make that happen.
+  </p>
+
+  <section class="card grid2">
+    <div>
+      <h2>Victim code <span class="muted">(runs after your HTML is rendered)</span></h2>
+<pre><code>const env = window.APP_ENV || 'production';
+
+if (env !== 'production') {
+  // debug branch: leaks internal state
+  show('DEBUG MODE ENABLED');
+  show('internal secret: ' + SECRET);
+} else {
+  show('hardened production mode');
+}</code></pre>
+      <p class="muted" style="margin:12px 0 0">
+        Note there is no <code>typeof</code> check and no comparison to a fallback object —
+        just a blind string comparison against whatever the global happens to be.
+      </p>
+    </div>
+
+    <div>
+      <h2>Your HTML injection</h2>
+      <textarea id="payload" spellcheck="false" placeholder="&lt;p&gt;hello&lt;/p&gt;"></textarea>
+      <div class="row">
+        <button id="run">Render &amp; run app</button>
+        <button id="verify" class="ghost">Verify exploit</button>
+        <button id="reset" class="ghost">Reset page</button>
+      </div>
+
+      <details>
+        <summary>Hint</summary>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          <code>window.APP_ENV</code> is a <em>named property</em>. Any element whose
+          <code>id</code> is <code>APP_ENV</code> becomes that value. Compare an element to
+          the string <code>"production"</code> — what does <code>===</code> say?
+        </p>
+      </details>
+
+      <details>
+        <summary>Solution</summary>
+<pre><code>&lt;a id="APP_ENV"&gt;&lt;/a&gt;</code></pre>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          <code>env</code> is now an <code>HTMLAnchorElement</code>, which is truthy and
+          <code>!== "production"</code>, so the debug branch executes.
+        </p>
+      </details>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Rendered injection <span class="muted">(#victim)</span></h2>
+    <div id="victim" class="victim"></div>
+  </section>
+
+  <section class="card">
+    <h2>App output / evidence</h2>
+    <div id="evidence" class="log"></div>
+  </section>
+
+  <div id="flag" class="flag hidden"></div>
+</main>
+
+<script src="/js/lab.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var KEY = "domlab.lab1.secret";
+  if (!sessionStorage.getItem(KEY)) {
+    sessionStorage.setItem(KEY, "FLAG{" + Math.random().toString(36).slice(2, 10) + "}");
+  }
+  var SECRET = sessionStorage.getItem(KEY);
+
+  var debugFired = false;
+
+  function runVictim() {
+    Lab.startedAt = Date.now();
+    Lab.clearLog();
+    debugFired = false;
+
+    Lab.inject(document.getElementById("payload").value);
+
+    /* ==================== VICTIM CODE ==================== */
+    var env = window.APP_ENV || "production";
+    Lab.log("window.APP_ENV -> " + Lab.describe(env));
+
+    if (env !== "production") {
+      debugFired = true;
+      Lab.log("DEBUG MODE ENABLED", "bad");
+      Lab.log("internal secret: " + SECRET, "bad");
+    } else {
+      Lab.log("hardened production mode");
+    }
+    /* ===================================================== */
+  }
+
+  function verify() {
+    if (debugFired) {
+      Lab.log("Exploit confirmed: the app entered debug mode.", "good");
+      Lab.solved("lab1", "FLAG{d0m_cl0bb3r1ng_101}");
+    } else {
+      Lab.log("Not exploited yet — the app is still in production mode.", "warn");
+    }
+  }
+
+  Lab.wire({
+    run: runVictim,
+    verify: verify,
+    reset: function () { debugFired = false; }
+  });
+
+  Lab.showExistingSolve("lab1");
+  runVictim();
+})();
+</script>
+</body>
+</html>

